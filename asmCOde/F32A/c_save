@@ -1,0 +1,119 @@
+Как работает этот код-
+.data
+string:          .byte '________________________________'
+
+zaslonka:        .word 0x00
+input_addr:      .word  0x80
+output_addr:     .word  0x84
+newline:         .word  0x0A
+err_code:        .word  0xCCCCCCCC
+is_output_n_end: .word  0x01
+
+.text
+
+_start:
+    lit 0 a!            \ A = 0 (указатель на память)
+    @p input_addr b!    \ B = 0x80 (адрес порта ввода)
+    lit 0               \ len = 0 (длина первой части строки)
+
+\ === СТАДИЯ 1: Читаем до \0 или \n ===
+stage1_loop:
+    @b                  \ Стек: [len, char]
+    dup                 \ Стек: [len, char, char]
+    lit 10 xor          \ Стек: [len, char, char ^ 10]
+    if hit_newline      \ Если '\n', переходим к записи
+    
+    dup                 \ Стек: [len, char, char]
+    if hit_null         \ Если '\0', переходим к записи
+    
+    \ Проверка на переполнение (len >= 31)
+    over                \ Меняем местами (SWAP): [char, len]
+    dup                 \ Стек: [char, len, len]
+    lit -31 +           \ Стек: [char, len, len-31]
+    -if overflow        \ Если len >= 31, прыгаем в overflow
+    
+    over                \ Возвращаем порядок: [len, char]
+    >r                  \ Отправляем char в return stack для реверса. Стек: [len]
+    lit 1 +             \ Увеличиваем len. Стек: [len+1]
+    stage1_loop ;
+
+\ --- Обработка конца строки (если встретили \n раньше \0) ---
+hit_newline:
+    drop                \ Убираем символ '\n'. Стек: [len]
+    @p output_addr b!   \ B = 0x84 (адрес вывода)
+    
+write_reversed_nl_loop:
+    dup                 \ Стек: [len, len]
+    if finish_newline   \ Если len == 0, завершаем
+    r>                  \ Достаем char. Стек: [len, char]
+    dup                 \ Стек: [len, char, char]
+    !+                  \ mem[A] = char, A++
+    !b                  \ mem[0x84] = char (вывод в порт)
+    lit -1 +            \ len--
+    write_reversed_nl_loop ;
+    
+finish_newline:
+    a                   \ Стек: [0, A]
+    lit -32 +           \ Стек: [0, A-32]
+    -if overflow_stage2 \ Защита от записи \0 за пределы буфера
+    drop                \ Убираем остаток len (0)
+    lit 0 !+            \ mem[A] = 0x00 (null-terminator)
+    lit 0x5f5f5f5f !+
+    halt
+
+\ --- Обработка нуль-терминатора (встретили \0) ---
+hit_null:
+    drop                \ Убираем символ '\0'. Стек: [len]
+    @p output_addr b!   \ B = 0x84 (адрес вывода)
+    
+write_reversed_null_loop:
+    dup                 \ Стек: [len, len]
+    if finish_null      \ Если len == 0, идем ко второй стадии
+    r>                  \ Стек: [len, char]
+    dup                 \ Стек: [len, char, char]
+    !+                  \ mem[A] = char, A++
+    !b                  \ mem[0x84] = char (вывод в порт)
+    lit -1 +            \ len--
+    write_reversed_null_loop ;
+    
+finish_null:
+    a                   \ Стек: [0, A]
+    lit -32 +           \ Стек: [0, A-32]
+    -if overflow_stage2 \ Защита от записи \0 за пределы буфера
+    drop                \ Убираем остаток len (0)
+    lit 0 !+            \ mem[A] = 0x00 (записываем \0)
+    @p input_addr b!    \ Возвращаем B = 0x80 для дочитывания остатка
+    \ (Проваливаемся в stage2_loop)
+
+\ === СТАДИЯ 2: Дочитываем остаток строки до \n ===
+stage2_loop:
+    @b                  \ Стек: [char]
+    dup                 \ Стек: [char, char]
+    lit 10 xor          \ Стек: [char, char ^ 10]
+    if finish_stage2    \ Если '\n', завершаем
+    
+    a                   \ Стек: [char, A]
+    lit -31 +           \ Стек: [char, A-31]
+    -if overflow_stage2 \ Если A >= 31, буфер переполнен
+    
+    !+                  \ mem[A] = char, A++ (в порт вывода НЕ пишем)
+    stage2_loop ;
+
+.org 180
+finish_stage2:
+    a                   \ Стек: [char, A]
+    lit -32 +           \ Стек: [char, A-32]
+    -if overflow_stage2 \ Защита от записи \0 за пределы буфера
+    drop                \ Убираем '\n'
+    lit 0 !+            \ mem[A] = 0x00
+    lit 0x5f5f5f5f !+
+    halt
+
+\ === Обработчики ошибок ===
+overflow:
+    drop                \ Убираем len (переход из stage1_loop)
+overflow_stage2:
+    drop                \ Убираем char или 0
+    @p output_addr b!   \ B = 0x84
+    @p err_code !b      \ Выводим код ошибки 0xCCCCCCCC
+    halt

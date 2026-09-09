@@ -1,0 +1,230 @@
+.data
+.org 00
+string:          .byte '________________________________' \ 5f
+
+.org 32
+input_addr:      .word  0x80
+output_addr:     .word  0x84
+newline:         .word  0x0A
+lenght:          .word  0x00
+bloc_size:       .word  0x00
+buffer:          .word  0x00
+count:           .word  0x00
+symbols_lenght:  .word  0x00
+
+.text
+
+_start:
+    @p input_addr a!
+
+    lit 0             \В дата-стек загрузили 0 (iq)
+
+read_loop:
+    @                 \Грузим из mem[80] символ
+
+    dup               \Дублируем значение в стек (множим его)
+    @p newline xor    \Загрузили '\n' и проверили он ли это
+    if reverse_start  \Если да, то строка кончилась
+
+    over lit 1 +      \Если нет, то свапаем T и S, увеличиваем длинну строки на 1
+
+    read_loop ;       \Считываем следующий
+
+reverse_start:  \[h,e,l,l,o,5,\n]
+    drop              \Сносим '\n'
+
+    !p lenght
+
+    lit 1 +
+
+check_count: \[h,e,l,l,o,6]
+    lit count
+    lit 1 +
+    !p count
+
+    lit -4 +
+    -if check_count ; \Посчитали количесвто блоков по 4
+    lit 4 +
+    dup
+    !p symbols_lenght
+
+make_first_block: \[h,e,l,l,o,2]
+    lit count
+    lit -2 +
+    !p count          \Уменьшили на 2 (певрый блок не целый, последний с длинной, так что не учитываем)
+
+    >r           \[h,e,l,l,o]
+    lit buffer   \[h,e,l,l,o, 0]     
+
+    2* 2* 2* 2*
+
+    + !p buffer  \[h,e,l,l]
+
+    r>               \Сместили буффер влево и слодили с сиволом
+
+    \[h,e,l,l,2]
+
+    lit -1 +
+    \[h,e,l,l, 1]
+    dup
+    if finish_first_block ; \Если всё, идём заполнять _
+    make_first_block ; \Иначе дольше заполняем символами
+
+finish_first_block: \[h,e,l, 0]
+    drop
+    lit 4 lit lenght
+    inv lit 1 +
+    +   \Получили необходием кол-во _ [h,e,l,2]
+
+
+
+reverse_loop:
+    dup              \Дублируем значение в стек (множим его)
+    if end           \Если длинна 0, то усё, строку вывели
+
+    >r              \dStack[-1] -> rStack[]
+
+    dup
+
+    @p output_addr b!
+    !b              \dStack[-1] -> mem[b]
+
+    lit buffer
+
+    2* 2* 2* 2*
+
+    + !p buffer
+
+    r>              \rStack[-1] -> dStack[]
+
+    lit -1 +        \Уменьшили длинну строки на 1
+
+    lit bloc_size
+    lit -4
+
+    reverse_loop ;  \Выводим дальше
+
+end:
+
+    halt            \Оканчиваем цирк
+
+
+
+
+
+
+
+
+
+.data
+.org 00
+string:          .byte '________________________________'
+
+.org 36
+input_addr:      .word  0x80
+output_addr:     .word  0x84
+newline:         .word  0x0A
+zatichka:        .byte  '____'
+id:              .word  0x01
+
+.text
+
+_start:
+    @p input_addr a!
+
+
+    lit 0             \В дата-стек загрузили 0 (iq)
+
+read_loop:
+    @                 \Грузим из mem[80] символ
+
+    dup               \Дублируем значение в стек (множим его)
+    @p newline xor    \Загрузили '\n' и проверили он ли это
+    if reverse_start  \Если да, то строка кончилась
+
+    over lit 1 +      \Если нет, то свапаем T и S, увеличиваем длинну строки на 1
+
+    read_loop ;       \Считываем следующий
+
+reverse_start:
+    drop              \Сносим '\n'
+
+    \[h,e,l,l,o,5]
+
+    dup \[h,e,l,l,o,5, 5]
+    lit 0 b! !b      \Загрузили длинну | [h,e,l,l,o,5, 5, 0] -> [h,e,l,l,o,5, 5] ->[h,e,l,l,o,5]
+
+reverse_loop:
+    dup              \Дублируем значение в стек (множим его)  [h,e,l,l,o,5, 5]
+    if end           \Если длинна 0, то усё, строку вывели [h,e,l,l,o,5]
+
+    @p output_addr b! \Загрузили адреса ввода-вывода [h,e,l,l,o,5]
+    >r              \dStack[-1] -> rStack[] [h,e,l,l,o]
+
+    !b              \dStack[-1] -> mem[b] [h,e,l,l]
+
+    r>              \rStack[-1] -> dStack[] [h,e,l,l,o,5]
+    lit -1 +        \Уменьшили длинну строки на 1 [h,e,l,l,o,4]
+
+    @p id dup >r       \Загрузили место для нашего символа [h,e,l,l,o,4,1]
+    b! >r !b r>         \[h,e,l,l,4]
+    r> lit 1 +          \[h,e,l,l,4, 2]
+    !p id  \[h,e,l,l,4]
+
+    reverse_loop ;  \Выводим дальше
+
+end:
+    halt            \Оканчиваем цирк
+
+
+
+
+.data 
+.org 00 
+string: .byte '________________________________' 
+.org 36 
+input_addr: .word 0x80 
+newline: .word 0x0A 
+lenght: .word 0x00
+zatichka: .byte '____'
+
+.text 
+_start: 
+    @p input_addr a!
+    lit 0 \В дата-стек загрузили 0 (iq)
+
+read_loop: 
+    @ \Грузим из mem[80] символ 
+    dup \Дублируем значение в стек (множим его) 
+
+    @p newline xor \Загрузили '\n' и проверили он ли это 
+
+    if reverse_start \Если да, то строка кончилась 
+
+    >r \Загрузили символ в rStack
+
+    lit 1 + \Если нет, то увеличиваем длинну строки на 1 
+    
+    read_loop ; \Считываем следующий 
+
+reverse_start: 
+    drop \Сносим '\n' \dStack = [5 (len)], rStack = [111:108:108:101:104] 
+    dup \[5, 5] 
+    lit 0 b! !b \[5] 
+    lit 1 a! 
+
+reverse_loop: 
+    dup if end \ если длина 0 -> конец 
+    !p lenght \ сохранили length 
+
+    r> \ достали символ из rStack 
+    !+ \ mem[A]=символ; A++ 
+    @p lenght lit -1 + \ length-- 
+    
+    reverse_loop ; 
+
+.org 200
+end: 
+    lit 1 + b! 
+    @p zatichka !b
+    halt \Оканчиваем цирк

@@ -1,0 +1,116 @@
+.data
+.org 00
+string:          .byte '________________________________'
+
+.org 32
+input_addr:      .word  0x80
+output_addr:     .word  0x84
+newline:         .word  0x0A
+
+.text
+
+_start:
+    @p input_addr a!
+    @p output_addr b! \Загрузили адреса ввода-вывода
+
+    lit 0             \В дата-стек загрузили 0 (iq)
+
+read_loop:
+    @                 \Грузим из mem[80] символ
+
+    dup               \Дублируем значение в стек (множим его)
+    @p newline xor    \Загрузили '\n' и проверили он ли это
+    if reverse_start  \Если да, то строка кончилась
+
+    over lit 1 +      \Если нет, то свапаем T и S, увеличиваем длинну строки на 1
+
+    read_loop ;       \Считываем следующий
+
+reverse_start:
+    drop              \Сносим '\n'
+
+reverse_loop:
+    dup              \Дублируем значение в стек (множим его)
+    if end           \Если длинна 0, то усё, строку вывели
+
+    >r              \dStack[-1] -> rStack[]
+
+    !b              \dStack[-1] -> mem[b]
+
+    r>              \rStack[-1] -> dStack[]
+    lit -1 +        \Уменьшили длинну строки на 1
+
+    reverse_loop ;  \Выводим дальше
+
+end:
+    halt            \Оканчиваем цирк
+
+
+
+.data
+\.org 00
+string:          .byte '________________________________'
+
+\.org 60
+input_addr:      .word  0x80
+output_addr:     .word  0x84
+newline:         .word  0x0A
+lenght:          .word  0x00
+zatichka:        .byte  '___'
+
+.text
+
+
+_start:
+    @p input_addr a!
+
+    lit 0             \В дата-стек загрузили 0 (iq)
+
+read_loop:
+    @                 \Грузим из mem[80] символ
+
+    dup               \Дублируем значение в стек (множим его)
+    @p newline xor    \Загрузили '\n' и проверили он ли это
+    if reverse_start  \Если да, то строка кончилась
+    >r                \Загрузили символ в rStack
+
+    lit 1 +      \Если нет, то увеличиваем длинну строки на 1
+
+    dup
+    lit 0x20 xor
+    if r_start
+
+    read_loop ;       \Считываем следующий
+
+reverse_start:
+    drop              \Сносим '\n'
+    \dStack = [5 (len)], rStack = [111:108:108:101:104]
+
+r_start:
+    lit 0 a!
+    @p output_addr b!
+
+
+reverse_loop:
+    dup
+    if end                \ если длина 0 -> конец dStack[5], rStack[111:108:108:101:104]
+
+    r>                    \ достали символ из rStack
+
+    dup
+    !+                    \ mem[A]=символ; A++
+    
+    !b
+
+    lit -1 +              \ length--
+
+    reverse_loop ;
+
+.org 200
+end:
+    lit 0x00
+    !+
+    lit 0x5f5f5f5f
+    !+
+
+    halt            \Оканчиваем цирк

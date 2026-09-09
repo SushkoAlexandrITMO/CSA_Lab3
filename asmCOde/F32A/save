@@ -1,0 +1,153 @@
+.data
+string:          .byte '________________________________'
+
+input_addr:      .word  0x80
+output_addr:     .word  0x84
+newline:         .word  0x0A
+err_code:        .word  0xCCCCCCCC
+
+.text
+
+_start:
+    @p input_addr a!
+    lit 0
+
+read_loop:
+    @
+    dup
+    @p newline xor
+    if read_done        \ Останавливаем ТОЛЬКО на '\n'
+    
+    \ Проверка overflow ДО добавления символа
+    over
+    dup
+    lit -31 +
+    -if overflow
+    
+    over
+    >r
+    lit 1 +
+    read_loop ;
+
+read_done:
+    drop
+    lit 0 a!
+    @p output_addr b!
+
+write_loop:
+    dup
+    if write_null
+    r>                  \ [length, ch]
+    dup                 \ [length, ch, ch]
+    !+                  \ mem[A]=ch; A++
+    dup                 \ [length, ch, ch]
+    if found_null       \ Если ch == 0 → перейти к циклу без вывода
+    !b                  \ mem[B]=ch (ВЫВОД!)
+    lit -1 +
+    write_loop ;
+
+found_null:
+    drop                \ Убираем ch
+    lit -1 +
+    \ Копируем оставшиеся символы БЕЗ вывода
+write_loop_no_output:
+    dup
+    if write_null
+    r>
+    !+                  \ Только запись в буфер, без вывода!
+    lit -1 +
+    write_loop_no_output ;
+
+write_null:
+    drop
+    lit 0 !
+    halt
+
+.org 140
+overflow:
+    drop
+    drop
+    @p output_addr b!
+    @p err_code !b
+    halt
+
+
+
+
+
+
+
+
+---------------------------
+.data
+string:          .byte '________________________________'
+
+input_addr:      .word  0x80
+output_addr:     .word  0x84
+newline:         .word  0x0A
+err_code:        .word  0xCCCCCCCC
+
+.text
+
+_start:
+    @p input_addr a!
+    lit 0
+
+read_loop:
+    @
+    dup
+    @p newline xor
+    if read_done        \ Останавливаем ТОЛЬКО на '\n'
+    
+    \ Проверка overflow ДО добавления символа
+    over
+    dup
+    lit -31 +
+    -if overflow
+    
+    over
+    >r
+    lit 1 +
+    read_loop ;
+
+read_done:
+    drop
+    lit 0 a!
+    @p output_addr b!
+
+write_loop:
+    dup
+    if write_null
+    r>                  \ [length, ch]
+    dup                 \ [length, ch, ch]
+    !+                  \ mem[A]=ch; A++
+    dup                 \ [length, ch, ch]
+    if found_null       \ Если ch == 0 → перейти к циклу без вывода
+    !b                  \ mem[B]=ch (ВЫВОД!)
+    lit -1 +
+    write_loop ;
+
+found_null:
+    drop                \ Убираем ch
+    lit -1 +
+    \ Копируем оставшиеся символы БЕЗ вывода
+write_loop_no_output:
+    dup
+    if write_null
+    r>
+    !+                  \ Только запись в буфер, без вывода!
+    lit -1 +
+    write_loop_no_output ;
+
+write_null:
+    drop
+    lit 0 !
+    halt
+
+.org 140
+overflow:
+    drop
+    drop
+    @p output_addr b!
+    @p err_code !b
+    halt

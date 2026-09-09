@@ -1,0 +1,231 @@
+; =========================================
+; base64 decoding (M68k)
+; =========================================
+; A0 - input (0x80)
+; A1 - output (0x84)
+; D0-D7 - temp
+; =========================================
+
+        .text
+start:
+        movea.l 0x80, A0      ; input
+        movea.l 0x84, A1      ; output
+
+        jsr decode_main
+        halt
+
+; =========================================
+; decode_main
+; =========================================
+decode_main:
+        link A6, -8
+
+        move.l 0, D7          ; output index
+
+loop_read:
+        ; ---- читаем 4 символа ----
+        move.b (A0)+, D0
+        cmp.b 10, D0
+        beq finish
+
+        move.b (A0)+, D1
+        move.b (A0)+, D2
+        move.b (A0)+, D3
+
+        ; ---- decode chars ----
+        move.l D0, -(A7)
+        jsr decode_char
+        addq.l 4, A7
+        cmp.l -1, D0
+        beq error
+        move.l D0, D4
+
+        move.l D1, -(A7)
+        jsr decode_char
+        addq.l 4, A7
+        cmp.l -1, D0
+        beq error
+        move.l D0, D5
+
+        ; '=' обработка
+        cmp.b '=', D2
+        beq pad2_case
+
+        move.l D2, -(A7)
+        jsr decode_char
+        addq.l 4, A7
+        cmp.l -1, D0
+        beq error
+        move.l D0, D6
+
+        cmp.b '=', D3
+        beq pad1_case
+
+        move.l D3, -(A7)
+        jsr decode_char
+        addq.l 4, A7
+        cmp.l -1, D0
+        beq error
+        move.l D0, D1      ; reuse
+
+        ; ===== нормальный случай =====
+        ; byte1
+        move.l D4, D0
+        asl.l 2, D0
+        move.l D5, D2
+        lsr.l 4, D2
+        or.l D2, D0
+        bsr write_byte
+
+        ; byte2
+        move.l D5, D0
+        asl.l 4, D0
+        move.l D6, D2
+        lsr.l 2, D2
+        or.l D2, D0
+        bsr write_byte
+
+        ; byte3
+        move.l D6, D0
+        asl.l 6, D0
+        or.l D1, D0
+        bsr write_byte
+
+        bra loop_read
+
+; ===== padding: XX== =====
+pad2_case:
+        ; только 1 байт
+
+        move.l D4, D0
+        asl.l 2, D0
+        move.l D5, D2
+        lsr.l 4, D2
+        or.l D2, D0
+        bsr write_byte
+
+        bra finish
+
+; ===== padding: XXX= =====
+pad1_case:
+        ; 2 байта
+
+        move.l D4, D0
+        asl.l 2, D0
+        move.l D5, D2
+        lsr.l 4, D2
+        or.l D2, D0
+        bsr write_byte
+
+        move.l D5, D0
+        asl.l 4, D0
+        move.l D6, D2
+        lsr.l 2, D2
+        or.l D2, D0
+        bsr write_byte
+
+        bra finish
+
+; =========================================
+; write_byte
+; D0 = byte
+; =========================================
+write_byte:
+        cmp.l 0x3F, D7
+        bgt overflow
+
+        move.b D0, (A1)+
+        addq.l 1, D7
+        rts
+
+; =========================================
+; finish
+; =========================================
+finish:
+        cmp.l 0x3F, D7
+        bgt overflow
+
+        move.b 0, (A1)    ; null terminator
+        move.l 0, D0
+        bra end
+
+; =========================================
+; error (-1)
+; =========================================
+error:
+        move.l -1, 0x84
+        move.l -1, D0
+        bra end
+
+; =========================================
+; overflow (0xCC)
+; =========================================
+overflow:
+        movea.l 0x84, A1
+        move.l 0x40, D0
+
+fill_cc:
+        move.b 0xCC, (A1)+
+        subq.l 1, D0
+        bne fill_cc
+
+        move.l 0, D0
+
+; =========================================
+end:
+        unlk A6
+        rts
+
+; =========================================
+; decode_char
+; вход: (A7) -> char
+; выход: D0 (0..63) или -1
+; =========================================
+decode_char:
+        link A6, 0
+        move.b 8(A6), D0
+
+        ; A-Z
+        cmp.b 'A', D0
+        blt check_lower
+        cmp.b 'Z', D0
+        bgt check_lower
+        sub.b 'A', D0
+        bra ok
+
+check_lower:
+        cmp.b 'a', D0
+        blt check_digit
+        cmp.b 'z', D0
+        bgt check_digit
+        sub.b 'a', D0
+        add.b 26, D0
+        bra ok
+
+check_digit:
+        cmp.b '0', D0
+        blt check_plus
+        cmp.b '9', D0
+        bgt check_plus
+        sub.b '0', D0
+        add.b 52, D0
+        bra ok
+
+check_plus:
+        cmp.b '+', D0
+        bne check_slash
+        move.l 62, D0
+        bra ok
+
+check_slash:
+        cmp.b '/', D0
+        bne invalid
+        move.l 63, D0
+        bra ok
+
+invalid:
+        move.l -1, D0
+
+ok:
+        unlk A6
+        rtss
